@@ -34,31 +34,26 @@ typedef struct
 #pragma pack(push, 1)
 typedef struct
 {
-    float input_data0; // 0
-    float input_data1; // 2
-    float input_data2; // 4
-    float input_data3; // 6
-    uint16_t data[150]; // 8 + 150 = 158
-    float input_data4; // 158
-    float input_data5;
-    float input_data6;
-    float input_data7;
-    uint16_t data_block1[150];
+    float input_data0;
+    float input_data1;
+    float input_data2;
 } input_reg_params_t;
 #pragma pack(pop)
 
 #pragma pack(push, 1)
 typedef struct
 {
-    float holding_data0;
-    float holding_data1;
-    float holding_data2;
-    float holding_data3;
-    uint16_t test_regs[150];
-    float holding_data4;
-    float holding_data5;
-    float holding_data6;
-    float holding_data7;
+    uint16_t holding_data0;
+    uint16_t holding_data1;
+    uint16_t holding_data2;
+    uint16_t holding_data3;
+    uint16_t holding_data4;
+    uint16_t holding_data5;
+    uint16_t holding_data6;
+    uint16_t holding_data7;
+    uint16_t holding_data8;
+    uint16_t holding_data9;
+    uint16_t holding_data10;
 } holding_reg_params_t;
 #pragma pack(pop)
 

@@ -5,10 +5,10 @@
 #include "sdkconfig.h"
 
 #define MB_PORT_NUM 1   // Number of UART port used for Modbus connection
-#define MB_DEV_SPEED 115200 // The communication speed of the UART
+#define MB_DEV_SPEED 9600 // The communication speed of the UART
 #define MB_UART_RXD 18
 #define MB_UART_TXD 17
-#define MB_UART_RTS 19
+#define MB_UART_RTS UART_PIN_NO_CHANGE
 #define MB_COMM_MODE MB_COMM_MODE_RTU
 
 // Note: Some pins on target chip cannot be assigned for UART communication.
@@ -25,7 +25,7 @@
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (1)
+#define POLL_TIMEOUT_MS (100)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 // The macro to get offset for parameter in the appropriate structure
@@ -53,15 +53,7 @@ enum
 // Enumeration of all supported CIDs for device (used in parameter definition table)
 enum
 {
-    CID_INP_DATA_0 = 0,
-    CID_HOLD_DATA_0,
-    CID_INP_DATA_1,
-    CID_HOLD_DATA_1,
-    CID_INP_DATA_2,
-    CID_HOLD_DATA_2,
-    CID_HOLD_TEST_REG,
-    CID_RELAY_P1,
-    CID_RELAY_P2,
+    CID_HOL_DATA_0 = 0,
     CID_COUNT
 };
 
@@ -76,24 +68,8 @@ enum
 // Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
-    {CID_INP_DATA_0, STR("Data_channel_0"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 0, 2,
-     INPUT_OFFSET(input_data0), PARAM_TYPE_FLOAT, 4, OPTS(-10, 10, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_HOLD_DATA_0, STR("Humidity_1"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 0, 2,
-     HOLD_OFFSET(holding_data0), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_INP_DATA_1, STR("Temperature_1"), STR("C"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 2, 2,
-     INPUT_OFFSET(input_data1), PARAM_TYPE_FLOAT, 4, OPTS(-40, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_HOLD_DATA_1, STR("Humidity_2"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 2, 2,
-     HOLD_OFFSET(holding_data1), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_INP_DATA_2, STR("Temperature_2"), STR("C"), MB_DEVICE_ADDR1, MB_PARAM_INPUT, 4, 2,
-     INPUT_OFFSET(input_data2), PARAM_TYPE_FLOAT, 4, OPTS(-40, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_HOLD_DATA_2, STR("Humidity_3"), STR("%rH"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 4, 2,
-     HOLD_OFFSET(holding_data2), PARAM_TYPE_FLOAT, 4, OPTS(0, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_HOLD_TEST_REG, STR("Test_regs"), STR("__"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 10, 58,
-     HOLD_OFFSET(test_regs), PARAM_TYPE_ASCII, 116, OPTS(0, 100, 1), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_RELAY_P1, STR("RelayP1"), STR("on/off"), MB_DEVICE_ADDR1, MB_PARAM_COIL, 0, 8,
-     COIL_OFFSET(coils_port0), PARAM_TYPE_U16, 2, OPTS(BIT1, 0, 0), PAR_PERMS_READ_WRITE_TRIGGER},
-    {CID_RELAY_P2, STR("RelayP2"), STR("on/off"), MB_DEVICE_ADDR1, MB_PARAM_COIL, 8, 8,
-     COIL_OFFSET(coils_port1), PARAM_TYPE_U16, 2, OPTS(BIT0, 0, 0), PAR_PERMS_READ_WRITE_TRIGGER}};
+    {CID_HOL_DATA_0, STR("Voltage"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 12, 2,
+     HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, PARAM_SIZE_U16, OPTS(100, 400, 1), PAR_PERMS_READ_WRITE_TRIGGER}};
 
 // Calculate number of parameters in the table
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
@@ -136,7 +112,7 @@ static void *master_get_param_data(const mb_parameter_descriptor_t *param_descri
 static void master_operation_func(void *arg)
 {
     esp_err_t err = ESP_OK;
-    float value = 0;
+    uint16_t value = 0;
     bool alarm_state = false;
     const mb_parameter_descriptor_t *param_descriptor = NULL;
 
@@ -156,8 +132,7 @@ static void master_operation_func(void *arg)
                 void *temp_data_ptr = master_get_param_data(param_descriptor);
                 assert(temp_data_ptr);
                 uint8_t type = 0;
-                if ((param_descriptor->param_type == PARAM_TYPE_ASCII) &&
-                    (param_descriptor->cid == CID_HOLD_TEST_REG))
+                if (param_descriptor->param_type == PARAM_TYPE_ASCII)
                 {
                     // Check for long array of registers of type PARAM_TYPE_ASCII
                     err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
@@ -169,30 +144,6 @@ static void master_operation_func(void *arg)
                                  (char *)param_descriptor->param_key,
                                  (char *)param_descriptor->param_units,
                                  *(uint32_t *)temp_data_ptr);
-                        // Initialize data of test array and write to slave
-                        if (*(uint32_t *)temp_data_ptr != 0xAAAAAAAA)
-                        {
-                            memset((void *)temp_data_ptr, 0xAA, param_descriptor->param_size);
-                            *(uint32_t *)temp_data_ptr = 0xAAAAAAAA;
-                            err = mbc_master_set_parameter(cid, (char *)param_descriptor->param_key,
-                                                           (uint8_t *)temp_data_ptr, &type);
-                            if (err == ESP_OK)
-                            {
-                                ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = (0x%08x), write successful.",
-                                         param_descriptor->cid,
-                                         (char *)param_descriptor->param_key,
-                                         (char *)param_descriptor->param_units,
-                                         *(uint32_t *)temp_data_ptr);
-                            }
-                            else
-                            {
-                                ESP_LOGE(TAG, "Characteristic #%d (%s) write fail, err = 0x%x (%s).",
-                                         param_descriptor->cid,
-                                         (char *)param_descriptor->param_key,
-                                         (int)err,
-                                         (char *)esp_err_to_name(err));
-                            }
-                        }
                     }
                     else
                     {
@@ -206,25 +157,25 @@ static void master_operation_func(void *arg)
                 else
                 {
                     err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
-                                                   (uint8_t *)&value, &type);
+                                                   (uint8_t *)temp_data_ptr, &type);
                     if (err == ESP_OK)
                     {
-                        *(float *)temp_data_ptr = value;
                         if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
                             (param_descriptor->mb_param_type == MB_PARAM_INPUT))
                         {
-                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %f (0x%x) read successful.",
+                            value = *(uint16_t *)temp_data_ptr;
+                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %d (0x%" PRIx32 ") read successful.",
                                      param_descriptor->cid,
                                      (char *)param_descriptor->param_key,
                                      (char *)param_descriptor->param_units,
                                      value,
                                      *(uint32_t *)temp_data_ptr);
-                            if (((value > param_descriptor->param_opts.max) ||
-                                 (value < param_descriptor->param_opts.min)))
-                            {
-                                alarm_state = true;
-                                break;
-                            }
+                            // if (((value > param_descriptor->param_opts.max) ||
+                            //      (value < param_descriptor->param_opts.min)))
+                            // {
+                            //     alarm_state = true;
+                            //     break;
+                            // }
                         }
                         else
                         {
