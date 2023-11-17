@@ -3,6 +3,7 @@
 #include "modbus_params.h" // for modbus parameters structures
 #include "mbcontroller.h"
 #include "sdkconfig.h"
+#include "tusb_msc.h"
 
 #define MB_PORT_NUM 1   // Number of UART port used for Modbus connection
 #define MB_DEV_SPEED 9600 // The communication speed of the UART
@@ -214,6 +215,7 @@ static esp_err_t master_init(void)
 void app_main(void)
 {
     // Initialization of device peripheral and objects
+    // storage_main();
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
     xTaskCreate(&master_task, "master_task", 8192, NULL, 5, NULL);

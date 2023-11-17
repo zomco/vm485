@@ -6,6 +6,7 @@
     "board/esp32s3-builtin.cfg"
   ],
   "files.associations": {
-    "stdint.h": "c"
+    "stdint.h": "c",
+    "tusb_msc.h": "c"
   }
 }
