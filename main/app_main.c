@@ -21,11 +21,11 @@
 #define MASTER_MAX_RETRY 30
 
 // Timeout to update cid over Modbus
-#define UPDATE_CIDS_TIMEOUT_MS (500)
+#define UPDATE_CIDS_TIMEOUT_MS (10000)
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 // Timeout between polls
-#define POLL_TIMEOUT_MS (100)
+#define POLL_TIMEOUT_MS (1)
 #define POLL_TIMEOUT_TICS (POLL_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 // The macro to get offset for parameter in the appropriate structure
@@ -42,7 +42,7 @@
         .opt1 = min_val, .opt2 = max_val, .opt3 = step_val \
     }
 
-static const char *TAG = "MASTER_TEST";
+static const char *TAG = "APP";
 
 // Enumeration of modbus device addresses accessed by master device
 enum
@@ -79,29 +79,25 @@ static void *master_get_param_data(const mb_parameter_descriptor_t *param_descri
 {
     assert(param_descriptor != NULL);
     void *instance_ptr = NULL;
-    if (param_descriptor->param_offset != 0)
-    {
-        switch (param_descriptor->mb_param_type)
-        {
-        case MB_PARAM_HOLDING:
-            instance_ptr = ((void *)&holding_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_INPUT:
-            instance_ptr = ((void *)&input_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_COIL:
-            instance_ptr = ((void *)&coil_reg_params + param_descriptor->param_offset - 1);
-            break;
-        case MB_PARAM_DISCRETE:
-            instance_ptr = ((void *)&discrete_reg_params + param_descriptor->param_offset - 1);
-            break;
-        default:
-            instance_ptr = NULL;
-            break;
+    if (param_descriptor->param_offset != 0) {
+        switch (param_descriptor->mb_param_type) {
+            case MB_PARAM_HOLDING:
+                instance_ptr = ((void *)&holding_reg_params + param_descriptor->param_offset - 1);
+                break;
+            case MB_PARAM_INPUT:
+                instance_ptr = ((void *)&input_reg_params + param_descriptor->param_offset - 1);
+                break;
+            case MB_PARAM_COIL:
+                instance_ptr = ((void *)&coil_reg_params + param_descriptor->param_offset - 1);
+                break;
+            case MB_PARAM_DISCRETE:
+                instance_ptr = ((void *)&discrete_reg_params + param_descriptor->param_offset - 1);
+                break;
+            default:
+                instance_ptr = NULL;
+                break;
         }
-    }
-    else
-    {
+    } else {
         ESP_LOGE(TAG, "Wrong parameter offset for CID #%d", param_descriptor->cid);
         assert(instance_ptr != NULL);
     }
@@ -109,76 +105,48 @@ static void *master_get_param_data(const mb_parameter_descriptor_t *param_descri
 }
 
 // User operation function to read slave values and check alarm
-static void master_operation_func(void *arg)
+static void master_task(void *arg)
 {
     esp_err_t err = ESP_OK;
-    uint16_t value = 0;
-    bool alarm_state = false;
     const mb_parameter_descriptor_t *param_descriptor = NULL;
 
-    ESP_LOGI(TAG, "Start modbus test...");
-
-    for (uint16_t retry = 0; retry <= MASTER_MAX_RETRY && (!alarm_state); retry++)
-    {
+    while (1) {
         // Read all found characteristics from slave(s)
-        for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++)
-        {
+        for (uint16_t cid = 0; (err != ESP_ERR_NOT_FOUND) && cid < MASTER_MAX_CIDS; cid++) {
             // Get data from parameters description table
             // and use this information to fill the characteristics description table
             // and having all required fields in just one table
             err = mbc_master_get_cid_info(cid, &param_descriptor);
-            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL))
-            {
+            if ((err != ESP_ERR_NOT_FOUND) && (param_descriptor != NULL)) {
                 void *temp_data_ptr = master_get_param_data(param_descriptor);
                 assert(temp_data_ptr);
                 uint8_t type = 0;
-                if (param_descriptor->param_type == PARAM_TYPE_ASCII)
-                {
+                if (param_descriptor->param_type == PARAM_TYPE_ASCII) {
                     // Check for long array of registers of type PARAM_TYPE_ASCII
-                    err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
-                                                   (uint8_t *)temp_data_ptr, &type);
-                    if (err == ESP_OK)
-                    {
+                    if (mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data_ptr, &type) == ESP_OK) {
                         ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = (0x%08x) read successful.",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
                                  (char *)param_descriptor->param_units,
                                  *(uint32_t *)temp_data_ptr);
-                    }
-                    else
-                    {
+                    } else {
                         ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
                                  (int)err,
                                  (char *)esp_err_to_name(err));
                     }
-                }
-                else
-                {
-                    err = mbc_master_get_parameter(cid, (char *)param_descriptor->param_key,
-                                                   (uint8_t *)temp_data_ptr, &type);
-                    if (err == ESP_OK)
-                    {
-                        if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) ||
-                            (param_descriptor->mb_param_type == MB_PARAM_INPUT))
-                        {
-                            value = *(uint16_t *)temp_data_ptr;
+                } else {
+                    if (mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data_ptr, &type) == ESP_OK) {
+                        if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) || (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
+                            uint16_t value = *(uint16_t *)temp_data_ptr;
                             ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %d (0x%" PRIx32 ") read successful.",
                                      param_descriptor->cid,
                                      (char *)param_descriptor->param_key,
                                      (char *)param_descriptor->param_units,
                                      value,
                                      *(uint32_t *)temp_data_ptr);
-                            // if (((value > param_descriptor->param_opts.max) ||
-                            //      (value < param_descriptor->param_opts.min)))
-                            // {
-                            //     alarm_state = true;
-                            //     break;
-                            // }
-                        }
-                        else
-                        {
+                        } else {
                             uint16_t state = *(uint16_t *)temp_data_ptr;
                             const char *rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
                             ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
@@ -187,15 +155,8 @@ static void master_operation_func(void *arg)
                                      (char *)param_descriptor->param_units,
                                      (const char *)rw_str,
                                      *(uint16_t *)temp_data_ptr);
-                            if (state & param_descriptor->param_opts.opt1)
-                            {
-                                alarm_state = true;
-                                break;
-                            }
                         }
-                    }
-                    else
-                    {
+                    } else {
                         ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
@@ -208,19 +169,6 @@ static void master_operation_func(void *arg)
         }
         vTaskDelay(UPDATE_CIDS_TIMEOUT_TICS); //
     }
-
-    if (alarm_state)
-    {
-        ESP_LOGI(TAG, "Alarm triggered by cid #%d.",
-                 param_descriptor->cid);
-    }
-    else
-    {
-        ESP_LOGE(TAG, "Alarm is not triggered after %d retries.",
-                 MASTER_MAX_RETRY);
-    }
-    ESP_LOGI(TAG, "Destroy master...");
-    ESP_ERROR_CHECK(mbc_master_destroy());
 }
 
 // Modbus master initialization
@@ -240,37 +188,25 @@ static esp_err_t master_init(void)
     void *master_handler = NULL;
 
     esp_err_t err = mbc_master_init(MB_PORT_SERIAL_MASTER, &master_handler);
-    MB_RETURN_ON_FALSE((master_handler != NULL), ESP_ERR_INVALID_STATE, TAG,
-                       "mb controller initialization fail.");
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb controller initialization fail, returns(0x%x).",
-                       (uint32_t)err);
+    MB_RETURN_ON_FALSE((master_handler != NULL), ESP_ERR_INVALID_STATE, TAG, "mb controller initialization fail.");
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb controller initialization fail, returns(0x%x).", (uint32_t)err);
     err = mbc_master_setup((void *)&comm);
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb controller setup fail, returns(0x%x).",
-                       (uint32_t)err);
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb controller setup fail, returns(0x%x).", (uint32_t)err);
 
     // Set UART pin numbers
-    err = uart_set_pin(MB_PORT_NUM, MB_UART_TXD, MB_UART_RXD,
-                       MB_UART_RTS, UART_PIN_NO_CHANGE);
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb serial set pin failure, uart_set_pin() returned (0x%x).", (uint32_t)err);
+    err = uart_set_pin(MB_PORT_NUM, MB_UART_TXD, MB_UART_RXD, MB_UART_RTS, UART_PIN_NO_CHANGE);
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb serial set pin failure, uart_set_pin() returned (0x%x).", (uint32_t)err);
 
     err = mbc_master_start();
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb controller start fail, returns(0x%x).",
-                       (uint32_t)err);
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb controller start fail, returns(0x%x).", (uint32_t)err);
 
     // Set driver mode to Half Duplex
     err = uart_set_mode(MB_PORT_NUM, UART_MODE_RS485_HALF_DUPLEX);
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb serial set mode failure, uart_set_mode() returned (0x%x).", (uint32_t)err);
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb serial set mode failure, uart_set_mode() returned (0x%x).", (uint32_t)err);
 
     vTaskDelay(5);
     err = mbc_master_set_descriptor(&device_parameters[0], num_device_parameters);
-    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG,
-                       "mb controller set descriptor fail, returns(0x%x).",
-                       (uint32_t)err);
+    MB_RETURN_ON_FALSE((err == ESP_OK), ESP_ERR_INVALID_STATE, TAG, "mb controller set descriptor fail, returns(0x%x).", (uint32_t)err);
     ESP_LOGI(TAG, "Modbus master stack initialized...");
     return err;
 }
@@ -280,6 +216,5 @@ void app_main(void)
     // Initialization of device peripheral and objects
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
-
-    master_operation_func(NULL);
+    xTaskCreate(&master_task, "master_task", 8192, NULL, 5, NULL);
 }
