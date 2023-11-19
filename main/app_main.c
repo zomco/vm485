@@ -22,7 +22,7 @@
 #define MASTER_MAX_RETRY 30
 
 // Timeout to update cid over Modbus
-#define UPDATE_CIDS_TIMEOUT_MS (10000)
+#define UPDATE_CIDS_TIMEOUT_MS (5000)
 #define UPDATE_CIDS_TIMEOUT_TICS (UPDATE_CIDS_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 // Timeout between polls
@@ -43,7 +43,7 @@
         .opt1 = min_val, .opt2 = max_val, .opt3 = step_val \
     }
 
-static const char *TAG = "APP";
+static const char *TAG = "app";
 
 // Enumeration of modbus device addresses accessed by master device
 enum
@@ -125,13 +125,13 @@ static void master_task(void *arg)
                 if (param_descriptor->param_type == PARAM_TYPE_ASCII) {
                     // Check for long array of registers of type PARAM_TYPE_ASCII
                     if (mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data_ptr, &type) == ESP_OK) {
-                        ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = (0x%08x) read successful.",
+                        ESP_LOGI(TAG, "characteristic #%d %s (%s) value = (0x%08x) read successful.",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
                                  (char *)param_descriptor->param_units,
                                  *(uint32_t *)temp_data_ptr);
                     } else {
-                        ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
+                        ESP_LOGE(TAG, "characteristic #%d (%s) read fail, err = 0x%x (%s).",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
                                  (int)err,
@@ -141,16 +141,18 @@ static void master_task(void *arg)
                     if (mbc_master_get_parameter(cid, (char *)param_descriptor->param_key, (uint8_t *)temp_data_ptr, &type) == ESP_OK) {
                         if ((param_descriptor->mb_param_type == MB_PARAM_HOLDING) || (param_descriptor->mb_param_type == MB_PARAM_INPUT)) {
                             uint16_t value = *(uint16_t *)temp_data_ptr;
-                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %d (0x%" PRIx32 ") read successful.",
+                            ESP_LOGI(TAG, "characteristic #%d %s (%s) value = %d (0x%" PRIx32 ") read successful.",
                                      param_descriptor->cid,
                                      (char *)param_descriptor->param_key,
                                      (char *)param_descriptor->param_units,
                                      value,
                                      *(uint32_t *)temp_data_ptr);
+                            append_data(value);
+                            
                         } else {
                             uint16_t state = *(uint16_t *)temp_data_ptr;
                             const char *rw_str = (state & param_descriptor->param_opts.opt1) ? "ON" : "OFF";
-                            ESP_LOGI(TAG, "Characteristic #%d %s (%s) value = %s (0x%x) read successful.",
+                            ESP_LOGI(TAG, "characteristic #%d %s (%s) value = %s (0x%x) read successful.",
                                      param_descriptor->cid,
                                      (char *)param_descriptor->param_key,
                                      (char *)param_descriptor->param_units,
@@ -158,7 +160,7 @@ static void master_task(void *arg)
                                      *(uint16_t *)temp_data_ptr);
                         }
                     } else {
-                        ESP_LOGE(TAG, "Characteristic #%d (%s) read fail, err = 0x%x (%s).",
+                        ESP_LOGE(TAG, "characteristic #%d (%s) read fail, err = 0x%x (%s).",
                                  param_descriptor->cid,
                                  (char *)param_descriptor->param_key,
                                  (int)err,
@@ -214,8 +216,7 @@ static esp_err_t master_init(void)
 
 void app_main(void)
 {
-    // Initialization of device peripheral and objects
-    // storage_main();
+    storage_main();
     ESP_ERROR_CHECK(master_init());
     vTaskDelay(10);
     xTaskCreate(&master_task, "master_task", 8192, NULL, 5, NULL);
