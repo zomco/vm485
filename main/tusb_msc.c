@@ -121,7 +121,14 @@ static void button_double_click_cb(void *arg, void *data)
 
 static void button_long_press_start_cb(void *arg, void *data)
 {
-    ESP_LOGI(TAG, "long click");
+    const esp_partition_t *data_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, NULL);
+    if (data_partition == NULL) {
+        ESP_LOGE(TAG, "failed to find fatfs partition. check the partition table.");
+        return;
+    }
+    ESP_LOGI(TAG, "erasing partition \"%s\" (0x%" PRIx32 " bytes)\n", data_partition->label, data_partition->size);
+    ESP_ERROR_CHECK(esp_partition_erase_range(data_partition, 0, data_partition->size));
+    esp_restart();
 }
 
 int append_data(uint16_t value)
@@ -183,7 +190,7 @@ void storage_main(void)
     //     .flags.with_dma = false, // whether to enable the DMA feature
     // };
     // ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
-
+    ESP_LOGI(TAG, "initializing buttons...");
     button_config_t cfg = {
         .type = BUTTON_TYPE_GPIO,
         .long_press_time = 3000,
