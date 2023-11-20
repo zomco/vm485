@@ -8,6 +8,8 @@
   "files.associations": {
     "stdint.h": "c",
     "tusb_msc.h": "c",
-    "compare": "c"
+    "compare": "c",
+    "*.tcc": "c",
+    "list": "c"
   }
 }
