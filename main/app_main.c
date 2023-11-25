@@ -69,8 +69,8 @@ enum
 // Access Mode - can be used to implement custom options for processing of characteristic (Read/Write restrictions, factory mode values and etc).
 const mb_parameter_descriptor_t device_parameters[] = {
     // { CID, Param Name, Units, Modbus Slave Addr, Modbus Reg Type, Reg Start, Reg Size, Instance Offset, Data Type, Data Size, Parameter Options, Access Mode}
-    {CID_HOL_DATA_0, STR("Voltage"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 12, 2,
-     HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, PARAM_SIZE_U16, OPTS(100, 400, 1), PAR_PERMS_READ_WRITE_TRIGGER}};
+    {CID_HOL_DATA_0, STR("Voltage"), STR("Volts"), MB_DEVICE_ADDR1, MB_PARAM_HOLDING, 0, 2,
+     HOLD_OFFSET(holding_data0), PARAM_TYPE_U16, PARAM_SIZE_U16, OPTS(0, 400, 1), PAR_PERMS_READ_WRITE_TRIGGER}};
 
 // Calculate number of parameters in the table
 const uint16_t num_device_parameters = (sizeof(device_parameters) / sizeof(device_parameters[0]));
